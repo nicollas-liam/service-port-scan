@@ -1,0 +1,50 @@
+import socket
+import psutil
+
+COMMON_SERVICES = {
+    20: "FTP Data", 21: "FTP Control", 22: "SSH", 23: "Telnet",
+    25: "SMTP", 53: "DNS", 80: "HTTP", 110: "POP3", 143: "IMAP",
+    443: "HTTPS", 3306: "MySQL", 5432: "PostgreSQL", 6379: "Redis",
+    27017: "MongoDB", 8080: "HTTP-alt"
+}
+
+def get_open_ports():
+    """return list of open ports on localhost"""
+    open_ports = []
+    for port in range(1, 65536):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.05)
+                if s.connect_ex(('127.0.0.1', port)) == 0:
+                    open_ports.append(port)
+        except Exception:
+            pass
+    return open_ports
+
+def map_processes():
+    """return dict {port: (pid, process_name)}"""
+    mapping = {}
+    for conn in psutil.net_connections(kind='inet'):
+        if conn.status == psutil.CONN_LISTEN and conn.laddr:
+            pid = conn.pid
+            try:
+                name = psutil.Process(pid).name() if pid else "?"
+            except psutil.NoSuchProcess:
+                name = "terminated"
+            mapping[conn.laddr.port] = (pid, name)
+    return mapping
+
+if __name__ == "__main__":
+    print("scanning localhost for open ports...\n")
+    open_ports = get_open_ports()
+    processes = map_processes()
+
+    if not open_ports:
+        print("no open ports found. all good!")
+    else:
+        print(f"{'Port':<6} {'PID':<6} {'Process':<20} {'Service'}")
+        print("-" * 50)
+        for port in open_ports:
+            pid, proc = processes.get(port, ("-", "-"))
+            service = COMMON_SERVICES.get(port, "-")
+            print(f"{port:<6} {pid:<6} {proc:<20} {service}")
